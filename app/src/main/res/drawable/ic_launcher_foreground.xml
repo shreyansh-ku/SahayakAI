@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer biometric circle ring -->
+    <path
+        android:strokeColor="#82D5CD"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:pathData="M 54,22 A 32,32 0 1,0 86,54" />
+    <path
+        android:strokeColor="#FFB77D"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:pathData="M 86,54 A 32,32 0 0,0 54,22" />
+    <!-- Knee joint bone articulation geometry -->
+    <!-- Femur lower condyles -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 44,30 L 64,30 C 65,30 66,35 68,42 C 70,48 64,52 60,52 C 57,52 55,49 54,49 C 53,49 51,52 48,52 C 44,52 38,48 40,42 C 42,35 43,30 44,30 Z" />
+    <!-- Tibia plateau -->
+    <path
+        android:fillColor="#9EF1E9"
+        android:pathData="M 42,57 C 46,56 50,58 54,58 C 58,58 62,56 66,57 C 69,58 68,64 64,74 L 44,74 C 40,64 39,58 42,57 Z" />
+    <!-- AI Reticle Center Node -->
+    <path
+        android:fillColor="#FFB77D"
+        android:pathData="M 54,52 m -3.5,0 a 3.5,3.5 0 1,0 7,0 a 3.5,3.5 0 1,0 -7,0" />
+    <!-- Crosshairs -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M 32,54 L 38,54 M 70,54 L 76,54 M 54,32 L 54,38 M 54,70 L 54,76" />
+</vector>

@@ -1,0 +1,6 @@
+{
+  "name": "OrthoScreen AI",
+  "description": "AI-assisted rural knee osteoarthritis (OA) early-risk screening and functional movement assessment for healthcare workers in Northeast India.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
