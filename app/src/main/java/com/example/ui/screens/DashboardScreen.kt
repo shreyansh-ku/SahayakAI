@@ -20,11 +20,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.ScreeningEntity
+import com.example.clinix.model.ActiveModule
+import com.example.ui.components.ModuleSwitcher
 import com.example.ui.FilterChipType
 import com.example.ui.OrthoScreenViewModel
 import com.example.ui.Screen
@@ -132,6 +135,15 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(top = 10.dp, bottom = 24.dp)
         ) {
+            // Module Switcher between OrthoScreen AI and ClinixAI
+            item {
+                ModuleSwitcher(
+                    activeModule = ActiveModule.ORTHOSCREEN,
+                    onSwitchModule = { viewModel.switchModule(it) },
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+
             // Triage Advisory Banner
             item {
                 ClinicalDisclaimerBanner()
@@ -147,7 +159,7 @@ fun DashboardScreen(
                         MetricTile(
                             modifier = Modifier.weight(1f),
                             label = "TOTAL SCREENED",
-                            value = "${totalCount.coerceAtLeast(142)}",
+                            value = "$totalCount",
                             subtext = "Majuli West Cohort",
                             containerColor = Color.White,
                             contentColor = Color(0xFF1E293B),
@@ -156,7 +168,7 @@ fun DashboardScreen(
                         MetricTile(
                             modifier = Modifier.weight(1f),
                             label = "HIGH RISK",
-                            value = "${highRiskCount.coerceAtLeast(18)}",
+                            value = "$highRiskCount",
                             subtext = "Urgent OPD Referral",
                             containerColor = Color(0xFFFFDAD6),
                             contentColor = Color(0xFF410002),
@@ -171,7 +183,7 @@ fun DashboardScreen(
                         MetricTile(
                             modifier = Modifier.weight(1f),
                             label = "MEDIUM RISK",
-                            value = "${medRiskCount.coerceAtLeast(47)}",
+                            value = "$medRiskCount",
                             subtext = "Community Review",
                             containerColor = Color(0xFFFEF3C7),
                             contentColor = Color(0xFF78350F),
@@ -250,7 +262,7 @@ fun DashboardScreen(
                         ) {
                             item {
                                 FilterChipItem(
-                                    label = "All (${totalCount.coerceAtLeast(142)})",
+                                    label = "All ($totalCount)",
                                     isSelected = activeFilter == FilterChipType.ALL,
                                     onClick = { viewModel.activeFilter.value = FilterChipType.ALL }
                                 )
@@ -265,7 +277,7 @@ fun DashboardScreen(
                             }
                             item {
                                 FilterChipItem(
-                                    label = "High Risk (${highRiskCount.coerceAtLeast(18)})",
+                                    label = "High Risk ($highRiskCount)",
                                     isSelected = activeFilter == FilterChipType.HIGH_RISK,
                                     onClick = { viewModel.activeFilter.value = FilterChipType.HIGH_RISK }
                                 )
@@ -290,16 +302,54 @@ fun DashboardScreen(
             }
 
             // Screening Queue Stream Cards
-            items(screenings, key = { it.screeningId }) { screening ->
-                ScreeningCard(
-                    screening = screening,
-                    onOpenDetail = {
-                        viewModel.navigateTo(Screen.PatientDetail(screening))
-                    },
-                    onOpenSlip = {
-                        slipScreeningToShow = screening
+            if (screenings.isEmpty()) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Text(
+                                text = "No Screening Records Found",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E293B)
+                            )
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No records match \"$searchQuery\". Try clearing your search." else "No screenings match the active filter.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
-                )
+                }
+            } else {
+                items(screenings, key = { it.screeningId }) { screening ->
+                    ScreeningCard(
+                        screening = screening,
+                        onOpenDetail = {
+                            viewModel.navigateTo(Screen.PatientDetail(screening))
+                        },
+                        onOpenSlip = {
+                            slipScreeningToShow = screening
+                        }
+                    )
+                }
             }
 
             // Field Visit Context Card (From Stitch Design)

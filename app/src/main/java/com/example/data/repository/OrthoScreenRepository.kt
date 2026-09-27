@@ -1,5 +1,7 @@
 package com.example.data.repository
 
+import com.example.data.local.ClinicalReviewDao
+import com.example.data.local.ClinicalReviewEntity
 import com.example.data.local.ScreeningDao
 import com.example.data.local.ScreeningEntity
 import kotlinx.coroutines.flow.Flow
@@ -8,13 +10,32 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class OrthoScreenRepository(private val dao: ScreeningDao) {
+class OrthoScreenRepository(
+    private val dao: ScreeningDao,
+    private val reviewDao: ClinicalReviewDao
+) {
 
     val allScreenings: Flow<List<ScreeningEntity>> = dao.getAllScreenings()
     val highRiskCount: Flow<Int> = dao.getHighRiskCount()
     val medRiskCount: Flow<Int> = dao.getMedRiskCount()
     val unsyncedCount: Flow<Int> = dao.getUnsyncedCount()
     val totalCount: Flow<Int> = dao.getTotalCount()
+
+    val allReviews: Flow<List<ClinicalReviewEntity>> = reviewDao.getAllReviews()
+    val reviewedCount: Flow<Int> = reviewDao.getReviewedCount()
+    val inReviewCount: Flow<Int> = reviewDao.getInReviewCount()
+
+    fun getReviewForCase(caseId: String): Flow<ClinicalReviewEntity?> {
+        return reviewDao.getReviewForCase(caseId)
+    }
+
+    suspend fun getReviewForCaseOnce(caseId: String): ClinicalReviewEntity? {
+        return reviewDao.getReviewForCaseOnce(caseId)
+    }
+
+    suspend fun saveReview(review: ClinicalReviewEntity) {
+        reviewDao.insertOrUpdateReview(review)
+    }
 
     suspend fun checkAndSeedInitialData() {
         val existing = dao.getAllScreenings().firstOrNull()
@@ -102,7 +123,7 @@ class OrthoScreenRepository(private val dao: ScreeningDao) {
                     riskScore = 0.84,
                     confidence = 0.88,
                     referralDestination = "District Orthopaedic OPD (Token #DH-812)",
-                    counselingSummary = "Referred to District Orthopaedic OPD • Suspected Advanced Gonarthrosis",
+                    counselingSummary = "Referred to District Orthopaedic OPD • High Functional Joint Strain",
                     syncStatus = "SYNCED"
                 ),
                 ScreeningEntity(

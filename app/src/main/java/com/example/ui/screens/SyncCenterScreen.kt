@@ -216,6 +216,13 @@ fun SyncCenterScreen(
                                 )
                             }
                         } else {
+                            val canSync = isOnline && unsyncedCount > 0
+                            val syncButtonLabel = when {
+                                !isOnline -> "Offline Mode — Connect to Sync ($unsyncedCount Queued)"
+                                unsyncedCount == 0 -> "All Records Up To Date (Synced)"
+                                else -> "Synchronize $unsyncedCount Pending Records"
+                            }
+
                             Button(
                                 onClick = { viewModel.syncAllRecords() },
                                 modifier = Modifier
@@ -223,14 +230,22 @@ fun SyncCenterScreen(
                                     .height(54.dp)
                                     .testTag("btn_trigger_sync"),
                                 shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0061A4)),
-                                enabled = unsyncedCount > 0
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF0061A4),
+                                    disabledContainerColor = Color(0xFFE2E8F0),
+                                    disabledContentColor = Color(0xFF64748B)
+                                ),
+                                enabled = canSync
                             ) {
-                                Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.White)
+                                Icon(
+                                    imageVector = if (!isOnline) Icons.Default.CloudOff else Icons.Default.CloudUpload,
+                                    contentDescription = null,
+                                    tint = if (canSync) Color.White else Color(0xFF64748B)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (unsyncedCount > 0) "Synchronize $unsyncedCount Pending Records" else "All Records Up To Date",
-                                    color = Color.White,
+                                    text = syncButtonLabel,
+                                    color = if (canSync) Color.White else Color(0xFF64748B),
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.bodyMedium
                                 )

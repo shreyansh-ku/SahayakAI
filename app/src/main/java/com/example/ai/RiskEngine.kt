@@ -60,7 +60,7 @@ object RiskEngine {
                     )
                 ),
                 isInconclusive = true,
-                inconclusiveReason = "Insufficient optical contrast or movement occlusion detected during video capture."
+                inconclusiveReason = "Sub-optimal lighting, poor video quality, or movement occlusion detected during capture."
             )
         }
 
@@ -152,7 +152,7 @@ object RiskEngine {
         val (level, primaryReferral, referralDest) = when {
             roundedRisk >= 0.70 -> Triple(
                 RiskLevel.HIGH,
-                "Priority referral to District Orthopaedic OPD within 7 days. Suspected advanced symptomatic gonarthrosis.",
+                "Priority referral to District Orthopaedic OPD within 7 days. High functional joint strain and mobility risk. Clinical evaluation recommended.",
                 "District Civil Hospital / Orthopaedic OPD"
             )
             roundedRisk >= 0.40 -> Triple(
@@ -182,10 +182,21 @@ object RiskEngine {
             )
         }
 
+        if (stiffnessDuration >= 1) {
+            factors.add(
+                ContributingFactor(
+                    title = "Prolonged Morning Joint Stiffness",
+                    description = "Morning joint stiffness lasting > 10 minutes indicating localized capsular resistance.",
+                    impactPercent = 20,
+                    category = "Joint Symptom"
+                )
+            )
+        }
+
         if (movement.stsCompletionTimeSec > 14.0 || movement.testSkipped) {
             factors.add(
                 ContributingFactor(
-                    title = "STS Transition Hesitation",
+                    title = if (movement.testSkipped) "Bypassed 5xSTS: Unable to Stand Safely" else "Prolonged 5xSTS Transition Delay",
                     description = if (movement.testSkipped) "Patient unable to stand safely unaided due to severe joint distress."
                     else "Prolonged extension deceleration and cadence delay during 5xSTS.",
                     impactPercent = 28,

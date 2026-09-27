@@ -84,6 +84,14 @@ fun PatientRegistrationScreen(
         else -> "Obese / Elevated Knee Loading"
     }
 
+    val isNameValid = name.isNotBlank()
+    val isAgeValid = age in 18..120
+    val isHeightValid = height in 90.0..250.0
+    val isWeightValid = weight in 20.0..250.0
+    val isVillageValid = village.isNotBlank()
+    val isConsentGiven = consent
+    val isFormValid = isNameValid && isAgeValid && isHeightValid && isWeightValid && isVillageValid && isConsentGiven
+
     Scaffold(
         topBar = {
             ClinicalHeader(
@@ -935,23 +943,69 @@ fun PatientRegistrationScreen(
 
             // Action Buttons
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!isFormValid) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color(0xFFFFFBEB),
+                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            val validationMsg = when {
+                                !isConsentGiven -> "Mandatory: Patient/Guardian verbal informed consent must be recorded before proceeding."
+                                !isNameValid -> "Please enter the patient's full name."
+                                !isAgeValid -> "Please enter a valid patient age (18 to 120)."
+                                !isHeightValid -> "Please enter a valid height in cm (90 to 250)."
+                                !isWeightValid -> "Please enter a valid weight in kg (20 to 250)."
+                                !isVillageValid -> "Please specify the patient's village / habitation."
+                                else -> "Please complete all required fields."
+                            }
+                            Text(
+                                text = validationMsg,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF92400E),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
                 Button(
-                    onClick = { viewModel.navigateTo(Screen.Questionnaire) },
+                    onClick = {
+                        if (isFormValid) {
+                            viewModel.navigateTo(Screen.Questionnaire)
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
                         .testTag("btn_proceed_to_questionnaire"),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0061A4))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF0061A4),
+                        disabledContainerColor = Color(0xFFCBD5E1),
+                        disabledContentColor = Color(0xFF64748B)
+                    ),
+                    enabled = isFormValid
                 ) {
                     Text(
                         "Continue to Symptoms Survey (Step 2)",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = if (isFormValid) Color.White else Color(0xFF64748B)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Default.ArrowForward, contentDescription = null, tint = if (isFormValid) Color.White else Color(0xFF64748B))
                 }
 
                 Surface(

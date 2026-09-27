@@ -418,6 +418,56 @@ fun MovementAssessmentScreen(
                 }
             }
 
+            // Field Video Quality & Inconclusive Simulation Card
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = if (isSimulatingInconclusive) Color(0xFFFEF3C7) else Color.White,
+                border = BorderStroke(1.dp, if (isSimulatingInconclusive) Color(0xFFFDE68A) else Color(0xFFE2E8F0))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSimulatingInconclusive) Icons.Default.Warning else Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = if (isSimulatingInconclusive) Color(0xFFB45309) else Color(0xFF059669),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = if (isSimulatingInconclusive) "Environmental Flag: Poor Lighting / Occlusion" else "Video Quality & Framing: Acceptable (0.96)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSimulatingInconclusive) Color(0xFF92400E) else Color(0xFF0F172A)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isSimulatingInconclusive)
+                                "Simulation active: Quality score 0.30 (< 0.65 threshold). AI risk engine will flag Inconclusive Assessment."
+                            else
+                                "Toggle to test system safety when rural clinic has sub-optimal lighting or poor patient framing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isSimulatingInconclusive) Color(0xFFB45309) else Color(0xFF64748B)
+                        )
+                    }
+
+                    Switch(
+                        checked = isSimulatingInconclusive,
+                        onCheckedChange = { isSimulatingInconclusive = it },
+                        modifier = Modifier.testTag("switch_simulate_inconclusive")
+                    )
+                }
+            }
+
             // Patient Safety Bypass & Test Skip Option (Geometric Balance: rounded-3xl)
             Surface(
                 shape = RoundedCornerShape(24.dp),

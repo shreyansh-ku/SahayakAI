@@ -437,38 +437,39 @@ fun ResultScreen(
                             color = Color(0xFF94A3B8)
                         )
 
-                        // Pills container
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                PillBadge(
-                                    text = "Morning Stiffness",
-                                    colorType = PillColorType.RED,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                PillBadge(
-                                    text = "Frequent Squatting",
-                                    colorType = PillColorType.RED,
-                                    modifier = Modifier.weight(1f)
-                                )
+                        // Dynamic Pills container
+                        val factors = result.contributingFactors
+                        if (factors.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                factors.chunked(2).forEach { pair ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        pair.forEach { factor ->
+                                            val pillType = when {
+                                                factor.isPrimary -> PillColorType.RED
+                                                factor.impactPercent > 15 -> PillColorType.AMBER
+                                                else -> PillColorType.SLATE
+                                            }
+                                            PillBadge(
+                                                text = "${factor.title} (+${factor.impactPercent}%)",
+                                                colorType = pillType,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        if (pair.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                PillBadge(
-                                    text = "High Physical Workload",
-                                    colorType = PillColorType.AMBER,
-                                    modifier = Modifier.weight(1.1f)
-                                )
-                                PillBadge(
-                                    text = "5xSTS Asymmetry (${((1.0 - movementFeatures.asymmetryScore) * 100).toInt()}%)",
-                                    colorType = PillColorType.SLATE,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                        } else {
+                            Text(
+                                text = "Standard functional joint parameters within expected baseline for cohort.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B)
+                            )
                         }
 
                         // Recommendation sub-section with border-t border-slate-50
@@ -480,7 +481,7 @@ fun ResultScreen(
 
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "RECOMMENDATION",
+                                text = "CLINICAL RECOMMENDATION & REFERRAL",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.5.sp,
@@ -488,7 +489,9 @@ fun ResultScreen(
                                 color = Color(0xFF94A3B8)
                             )
                             Text(
-                                text = "Further clinical evaluation is strongly recommended. Prioritize diagnostic imaging (weight-bearing AP/Lateral views) and functional gait analysis.",
+                                text = result.primaryReferral.ifBlank {
+                                    "Further clinical evaluation is recommended. Prioritize weight-bearing joint assessment and supervised functional physical therapy."
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF334155),

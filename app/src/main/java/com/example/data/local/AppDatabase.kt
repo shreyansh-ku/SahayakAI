@@ -5,9 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [ScreeningEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ScreeningEntity::class, ClinicalReviewEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun screeningDao(): ScreeningDao
+    abstract fun clinicalReviewDao(): ClinicalReviewDao
 
     companion object {
         @Volatile

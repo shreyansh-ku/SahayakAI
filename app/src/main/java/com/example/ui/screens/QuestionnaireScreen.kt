@@ -274,8 +274,8 @@ fun QuestionnaireScreen(
 
                     val stiffnessOptions = listOf(
                         "< 10 minutes (Normal/Transient)",
-                        "10 - 30 minutes (Classic Osteoarthritis indicator)",
-                        "> 30 minutes (Possible Inflammatory/RA flag)",
+                        "10 - 30 minutes (Significant joint stiffness indicator)",
+                        "> 30 minutes (Prolonged stiffness flag)",
                         "Severe / Persistent throughout morning"
                     )
 

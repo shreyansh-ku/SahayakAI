@@ -236,6 +236,23 @@ fun PatientDetailScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Generate Thermal Referral Slip", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             }
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.switchModule(com.example.clinix.model.ActiveModule.CLINIXAI)
+                    viewModel.navigateTo(Screen.ClinixCaseDetail(screening.screeningId))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFF0F766E)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0F766E))
+            ) {
+                Icon(Icons.Default.Hub, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open in ClinixAI Clinical Review", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 

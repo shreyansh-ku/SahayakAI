@@ -25,6 +25,18 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+import com.example.clinix.model.ActiveModule
+import com.example.clinix.model.AnalyticalCohortInfo
+import com.example.clinix.model.AnalyticalCohortType
+import com.example.clinix.model.AtypicalCase
+import com.example.clinix.model.ClinixCase
+import com.example.clinix.model.ClinixOverviewMetrics
+import com.example.clinix.model.ReviewStatus
+import com.example.clinix.model.SimilarCase
+import com.example.clinix.model.UserRole
+import com.example.clinix.service.ClinixAnalyticsService
+import com.example.data.local.ClinicalReviewEntity
+
 sealed class Screen {
     object Login : Screen()
     object Dashboard : Screen()
@@ -34,6 +46,16 @@ sealed class Screen {
     object Result : Screen()             // Step 4
     object SyncCenter : Screen()
     data class PatientDetail(val screening: ScreeningEntity) : Screen()
+
+    // ClinixAI Module Screens
+    object ClinixOverview : Screen()
+    object ClinixCases : Screen()
+    data class ClinixCaseDetail(val caseId: String) : Screen()
+    data class ClinixSimilarCases(val caseId: String, val topK: Int = 5) : Screen()
+    object ClinixCohorts : Screen()
+    data class ClinixCohortDetail(val cohortType: AnalyticalCohortType) : Screen()
+    object ClinixOutliers : Screen()
+    object ClinixProfile : Screen()
 }
 
 enum class FilterChipType {
@@ -50,7 +72,7 @@ class OrthoScreenViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = OrthoScreenRepository(db.screeningDao())
+        repository = OrthoScreenRepository(db.screeningDao(), db.clinicalReviewDao())
         viewModelScope.launch {
             repository.checkAndSeedInitialData()
         }
@@ -135,7 +157,7 @@ class OrthoScreenViewModel(application: Application) : AndroidViewModel(applicat
     val comorbidityDiabetes = MutableStateFlow(true)
     val comorbidityRheumatoid = MutableStateFlow(false)
     val comorbidityNone = MutableStateFlow(false)
-    val consentAccepted = MutableStateFlow(true)
+    val consentAccepted = MutableStateFlow(false)
     val attestingWorker = MutableStateFlow("Pranita Saikia, ASHA (SC-Garamur)")
 
     // Questionnaire Answers (WOMAC-adapted)
@@ -184,7 +206,7 @@ class OrthoScreenViewModel(application: Application) : AndroidViewModel(applicat
         comorbidityDiabetes.value = false
         comorbidityRheumatoid.value = false
         comorbidityNone.value = true
-        consentAccepted.value = true
+        consentAccepted.value = false
 
         // Default symptoms
         qPainScore.value = 2
@@ -336,6 +358,14 @@ class OrthoScreenViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun syncAllRecords() {
+        if (!_isOnline.value) {
+            _syncMessage.value = "Sync Failed: Device is offline. Connect to network before synchronizing."
+            viewModelScope.launch {
+                delay(3000)
+                _syncMessage.value = null
+            }
+            return
+        }
         viewModelScope.launch {
             _isSyncing.value = true
             _syncMessage.value = "Connecting to Assam State Health Portal / Majuli PHC Gateway..."
@@ -348,8 +378,317 @@ class OrthoScreenViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun toggleNetwork() {
+        _isOnline.value = !_isOnline.value
+    }
+
     private fun generateNewCaseId(): String {
         val rand = (1000..9999).random()
         return "PT-2023-ASM-$rand"
+    }
+
+    // ==========================================
+    // CLINIXAI MODULE INTEGRATION & STATE FLOWS
+    // ==========================================
+
+    val analyticsService = ClinixAnalyticsService()
+    private val demoEntities = analyticsService.createSyntheticDemoCases()
+
+    private val _activeModule = MutableStateFlow(ActiveModule.ORTHOSCREEN)
+    val activeModule: StateFlow<ActiveModule> = _activeModule.asStateFlow()
+
+    private val _userRole = MutableStateFlow(UserRole.AUTHORIZED_USER)
+    val userRole: StateFlow<UserRole> = _userRole.asStateFlow()
+
+    private val _clinixSearchQuery = MutableStateFlow("")
+    val clinixSearchQuery: StateFlow<String> = _clinixSearchQuery.asStateFlow()
+
+    private val _clinixFilter = MutableStateFlow("ALL")
+    val clinixFilter: StateFlow<String> = _clinixFilter.asStateFlow()
+
+    // Combined Clinix Cases (Room Screenings + Demo Synthetics + Room Reviews)
+    val allClinixCases: StateFlow<List<ClinixCase>> = combine(
+        repository.allScreenings,
+        repository.allReviews
+    ) { screenings, reviews ->
+        val reviewMap = reviews.associateBy { it.caseId }
+        val combinedEntities = (screenings + demoEntities).distinctBy { it.screeningId }
+
+        val indexed = combinedEntities.map { entity ->
+            val isDemo = entity.screeningId.startsWith("DEMO-")
+            val review = reviewMap[entity.screeningId]
+            val cohort = analyticsService.determineCohort(entity)
+            val (isAtypical, reason) = analyticsService.evaluateAtypical(entity)
+            val vector = analyticsService.embeddingProvider.extractEmbedding(entity)
+            ClinixCase(
+                caseId = entity.screeningId,
+                screening = entity,
+                review = review,
+                assignedCohort = cohort,
+                isAtypical = isAtypical,
+                atypicalReason = reason,
+                isDemo = isDemo,
+                featureVector = vector
+            )
+        }
+
+        // Pre-index into vector store for fast Cosine retrieval
+        viewModelScope.launch {
+            analyticsService.vectorStore.indexCases(
+                indexed.map { it.caseId to it.featureVector }
+            )
+        }
+
+        indexed
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Filtered Cases in Case Queue
+    val filteredClinixCases: StateFlow<List<ClinixCase>> = combine(
+        allClinixCases,
+        _clinixSearchQuery,
+        _clinixFilter
+    ) { cases, query, filter ->
+        cases.filter { item ->
+            val matchesQuery = query.isBlank() ||
+                item.caseId.contains(query, ignoreCase = true) ||
+                item.screening.patientId.contains(query, ignoreCase = true) ||
+                item.screening.patientName.contains(query, ignoreCase = true) ||
+                item.screening.village.contains(query, ignoreCase = true)
+
+            val matchesFilter = when (filter) {
+                "ALL" -> true
+                "HIGH" -> item.screening.riskLevel == "HIGH"
+                "MEDIUM" -> item.screening.riskLevel == "MEDIUM"
+                "LOW" -> item.screening.riskLevel == "LOW"
+                "INCONCLUSIVE" -> item.screening.riskLevel == "INCONCLUSIVE"
+                "NEW" -> item.reviewStatus == ReviewStatus.NEW || item.reviewStatus == ReviewStatus.IN_REVIEW
+                "REVIEWED" -> item.reviewStatus == ReviewStatus.REVIEWED
+                "ATYPICAL" -> item.isAtypical
+                else -> true
+            }
+
+            matchesQuery && matchesFilter
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Priority Cases for Clinician Overview
+    val clinixPriorityCases: StateFlow<List<ClinixCase>> = allClinixCases.combine(_activeModule) { cases, _ ->
+        cases.filter { it.screening.riskLevel == "HIGH" || it.isAtypical || it.screening.riskLevel == "INCONCLUSIVE" }
+            .sortedWith(
+                compareByDescending<ClinixCase> { it.screening.riskLevel == "HIGH" }
+                    .thenByDescending { it.reviewStatus == ReviewStatus.NEW }
+                    .thenByDescending { it.screening.timestamp }
+            )
+            .take(6)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Clinix Overview Metrics
+    val clinixOverviewMetrics: StateFlow<ClinixOverviewMetrics> = allClinixCases.combine(repository.allReviews) { cases, _ ->
+        val newCases = cases.count { it.reviewStatus == ReviewStatus.NEW }
+        val highRisk = cases.count { it.screening.riskLevel == "HIGH" }
+        val awaiting = cases.count { it.reviewStatus == ReviewStatus.NEW || it.reviewStatus == ReviewStatus.IN_REVIEW }
+        val inconclusive = cases.count { it.screening.riskLevel == "INCONCLUSIVE" }
+        val atypical = cases.count { it.isAtypical }
+        ClinixOverviewMetrics(
+            newCasesCount = newCases,
+            highRiskCount = highRisk,
+            awaitingReviewCount = awaiting,
+            inconclusiveCount = inconclusive,
+            atypicalCount = atypical
+        )
+    }.stateIn(viewModelScope, SharingStarted.Lazily, ClinixOverviewMetrics(0, 0, 0, 0, 0))
+
+    // Analytical Cohort Info List
+    val analyticalCohortInfos: StateFlow<List<AnalyticalCohortInfo>> = allClinixCases.combine(_activeModule) { cases, _ ->
+        AnalyticalCohortType.values().map { cohortType ->
+            val cohortCases = cases.filter { it.assignedCohort == cohortType }
+            val riskDist = cohortCases.groupingBy { it.screening.riskLevel }.eachCount()
+            val commonPatterns = when (cohortType) {
+                AnalyticalCohortType.COHORT_A -> listOf(
+                    "High subjective discomfort (Pain 6-9/10)",
+                    "Morning stiffness under 30 minutes",
+                    "Relatively preserved 5xSTS transition velocity (<14 sec)"
+                )
+                AnalyticalCohortType.COHORT_B -> listOf(
+                    "Prolonged sit-to-stand transition (>15 sec)",
+                    "Marked single-leg offloading / asymmetry (>25%)",
+                    "Reduced knee flexion ROM (<100°)"
+                )
+                AnalyticalCohortType.COHORT_C -> listOf(
+                    "Combined severe pain (7+/10) and functional delay",
+                    "Elevated morning stiffness (>30 mins)",
+                    "Multicomponent mobility impairment"
+                )
+                AnalyticalCohortType.COHORT_D -> listOf(
+                    "Atypical demographic or past traumatic joint injury",
+                    "Discordance between reported discomfort and movement velocity",
+                    "Safety-paused movement assessments"
+                )
+            }
+            AnalyticalCohortInfo(
+                cohortType = cohortType,
+                caseCount = cohortCases.size,
+                commonPatterns = commonPatterns,
+                riskDistribution = riskDist,
+                recentCases = cohortCases
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Atypical Cases List
+    val atypicalCasesList: StateFlow<List<AtypicalCase>> = allClinixCases.combine(_activeModule) { cases, _ ->
+        cases.filter { it.isAtypical }.map { item ->
+            AtypicalCase(
+                caseId = item.caseId,
+                patientId = item.screening.patientId,
+                patientName = item.screening.patientName,
+                age = item.screening.age,
+                riskLevel = item.screening.riskLevel,
+                outlierScore = if (item.screening.testSkipped) 0.88 else 0.65,
+                nearestCohort = item.assignedCohort.title,
+                explanation = item.atypicalReason ?: "Distinct feature variance compared to cluster centers",
+                unusualFeatures = listOfNotNull(
+                    if (item.screening.testSkipped) "Movement protocol safely bypassed" else null,
+                    if (item.screening.asymmetry >= 0.35) "Pronounced offloading asymmetry (${(item.screening.asymmetry * 100).toInt()}%)" else null,
+                    if (item.screening.hasInjury) "Documented past knee injury / surgical history" else null,
+                    if (item.screening.painScore >= 8 && item.screening.stsTimeSec <= 10.0) "High pain with preserved rapid transition speed" else null
+                ),
+                screening = item.screening,
+                isDemo = item.isDemo
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Similar Cases State
+    private val _similarCasesList = MutableStateFlow<List<SimilarCase>>(emptyList())
+    val similarCasesList: StateFlow<List<SimilarCase>> = _similarCasesList.asStateFlow()
+
+    fun switchModule(module: ActiveModule) {
+        _activeModule.value = module
+        when (module) {
+            ActiveModule.CLINIXAI -> {
+                if (_currentScreen.value !is Screen.ClinixOverview &&
+                    _currentScreen.value !is Screen.ClinixCases &&
+                    _currentScreen.value !is Screen.ClinixCaseDetail &&
+                    _currentScreen.value !is Screen.ClinixSimilarCases &&
+                    _currentScreen.value !is Screen.ClinixCohorts &&
+                    _currentScreen.value !is Screen.ClinixCohortDetail &&
+                    _currentScreen.value !is Screen.ClinixOutliers &&
+                    _currentScreen.value !is Screen.ClinixProfile
+                ) {
+                    _currentScreen.value = Screen.ClinixOverview
+                }
+            }
+            ActiveModule.ORTHOSCREEN -> {
+                if (_currentScreen.value is Screen.ClinixOverview ||
+                    _currentScreen.value is Screen.ClinixCases ||
+                    _currentScreen.value is Screen.ClinixCaseDetail ||
+                    _currentScreen.value is Screen.ClinixSimilarCases ||
+                    _currentScreen.value is Screen.ClinixCohorts ||
+                    _currentScreen.value is Screen.ClinixCohortDetail ||
+                    _currentScreen.value is Screen.ClinixOutliers ||
+                    _currentScreen.value is Screen.ClinixProfile
+                ) {
+                    _currentScreen.value = Screen.Dashboard
+                }
+            }
+        }
+    }
+
+    fun setUserRole(role: UserRole) {
+        _userRole.value = role
+        if (!role.canAccessClinixAI && _activeModule.value == ActiveModule.CLINIXAI) {
+            switchModule(ActiveModule.ORTHOSCREEN)
+        } else if (!role.canAccessOrthoScreen && _activeModule.value == ActiveModule.ORTHOSCREEN) {
+            switchModule(ActiveModule.CLINIXAI)
+        }
+    }
+
+    fun setClinixSearchQuery(query: String) {
+        _clinixSearchQuery.value = query
+    }
+
+    fun setClinixFilter(filter: String) {
+        _clinixFilter.value = filter
+    }
+
+    fun openClinixCase(clinixCase: ClinixCase) {
+        _currentScreen.value = Screen.ClinixCaseDetail(clinixCase.caseId)
+    }
+
+    fun openSimilarCases(clinixCase: ClinixCase, topK: Int = 5) {
+        _currentScreen.value = Screen.ClinixSimilarCases(clinixCase.caseId, topK)
+    }
+
+    fun openCohortDetail(cohortType: AnalyticalCohortType) {
+        _currentScreen.value = Screen.ClinixCohortDetail(cohortType)
+    }
+
+    fun getClinixCaseById(caseId: String): ClinixCase? {
+        return allClinixCases.value.firstOrNull { it.caseId == caseId }
+    }
+
+    fun getCohortInfo(cohortType: AnalyticalCohortType): AnalyticalCohortInfo {
+        return analyticalCohortInfos.value.firstOrNull { it.cohortType == cohortType }
+            ?: AnalyticalCohortInfo(cohortType, 0, emptyList(), emptyMap(), emptyList())
+    }
+
+    fun getAiAnalyticalSummary(screening: ScreeningEntity): List<String> {
+        return analyticsService.generateAiAnalyticalSummary(screening)
+    }
+
+    fun computeSimilarCases(caseId: String, topK: Int) {
+        viewModelScope.launch {
+            val baseCase = getClinixCaseById(caseId) ?: return@launch
+            val candidates = allClinixCases.value.filter { it.caseId != caseId }
+
+            val ranked = candidates.map { candidate ->
+                val simScore = analyticsService.embeddingProvider.calculateCosineSimilarity(
+                    baseCase.featureVector,
+                    candidate.featureVector
+                )
+                val (shared, diffs) = analyticsService.compareCases(baseCase.screening, candidate.screening)
+                SimilarCase(
+                    caseId = candidate.caseId,
+                    patientId = candidate.screening.patientId,
+                    age = candidate.screening.age,
+                    sex = candidate.screening.sex,
+                    screeningRisk = candidate.screening.riskLevel,
+                    similarityScore = simScore,
+                    sharedPatterns = shared,
+                    differences = diffs,
+                    stsTimeSec = candidate.screening.stsTimeSec,
+                    painScore = candidate.screening.painScore,
+                    isDemo = candidate.isDemo
+                )
+            }
+                .sortedByDescending { it.similarityScore }
+                .take(topK)
+
+            _similarCasesList.value = ranked
+        }
+    }
+
+    fun saveClinicianReview(
+        caseId: String,
+        status: ReviewStatus,
+        clinicalNote: String,
+        actionTaken: String
+    ) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.ENGLISH)
+            val review = ClinicalReviewEntity(
+                reviewId = "REV-" + UUID.randomUUID().toString().take(8),
+                caseId = caseId,
+                clinicianId = "DR-BARUAH-091",
+                status = status.name,
+                clinicalNote = clinicalNote,
+                actionTaken = actionTaken,
+                reviewedAt = now,
+                formattedReviewDate = dateFormat.format(Date(now))
+            )
+            repository.saveReview(review)
+        }
     }
 }

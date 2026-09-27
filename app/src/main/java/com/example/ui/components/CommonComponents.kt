@@ -375,6 +375,26 @@ fun ClinicalBottomBar(
                     indicatorColor = BluePillBg
                 )
             )
+
+            NavigationBarItem(
+                selected = false,
+                onClick = { onNavigate(Screen.ClinixOverview) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Hub,
+                        contentDescription = "ClinixAI Clinical Module",
+                        tint = Color(0xFF0F766E)
+                    )
+                },
+                label = { Text("CLINIX", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = Color(0xFF0F766E),
+                    selectedTextColor = Color(0xFF0F766E),
+                    unselectedIconColor = Color(0xFF0F766E),
+                    unselectedTextColor = Color(0xFF0F766E),
+                    indicatorColor = Color(0xFFCCFBF1)
+                )
+            )
         }
     }
 }
